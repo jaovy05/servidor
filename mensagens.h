@@ -26,3 +26,10 @@ typedef struct mensagem
 } Mensagem;
 
 #endif // S_MENSAGEM
+
+typedef struct roteador
+{
+    Endereco endereco;
+    char id;
+    int enlace;
+} Roteador;
