@@ -29,10 +29,12 @@ int makeSocket(struct sockaddr_in si_me, int port){
     return s;
 }
 
+static uint roteador1, roteador2;
+// 2 x (2 char id) + 4 char enlace + 2 char espaço + 1 \n
+static char linha[11];
+
 void readEnlaces(uint i, FILE *file){
-    uint roteador1, roteador2, enlace;
-    // 2 x (2 char id) + 4 char enlace + 2 char espaço + 1 \n
-    char linha[11];
+    uint enlace;
     // para entender melhor só descomentar esses printf
     do {
     
@@ -53,7 +55,7 @@ void readEnlaces(uint i, FILE *file){
     // se o roteador atual faz parte do enlace ele para aqui e chama a função +1
     readEnlaces(i + 1, file);
     // printf("es: %u %u %u\n", roteador1, roteador2, enlace);
-    // após ter a variavel roteadores alocada corretamente saí registrando os enlaces
+    
     roteadores[i].enlace = enlace;
 }
 
