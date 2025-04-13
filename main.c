@@ -14,10 +14,9 @@
 
 #define BUFLEN 101  //Max length of buffer
 #define PORT 12345   //The port on which to listen for incoming data
- 
-Endereco *roteadores;
 
- 
+Roteador *roteadores = NULL;
+
 void *sender(void *socket);
 
 void *receiver(void *sockect){
@@ -28,10 +27,10 @@ void *receiver(void *sockect){
 }
 
 
-int main(void){
+int main(){
     struct sockaddr_in si_me;
     int sock = makeSocket(si_me, PORT);
-
+    readEnlaces(0, fopen("enlaces.config", "r"));
     // para o prinft n se cagar inteiro
     setvbuf(stdout, 0, _IONBF, 0) ;
 
