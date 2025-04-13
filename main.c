@@ -42,8 +42,8 @@ int main(){
     pthread_create(&t_sender, NULL, sender, &sock);
 
     pthread_join(t_receiver, NULL); // para n encerrar a thread principal sem as outras encerrarem 
-    pthread_join(t_sender, NULL);    
-    
+    pthread_join(t_sender, NULL);
+
     close(sock);
     return 0;
 }
