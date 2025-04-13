@@ -13,7 +13,7 @@ bool queue_full(Queue *q) {
     return (((q->rear + 1) & (SIZE_QUEUE - 1)) == q->front);
 }
 
-bool enqueue(Queue *q, int newItem) {
+bool enqueue(Queue *q, Mensagem newItem) {
     if(queue_full(q)) {
         printf("Queue is full.");
         return false;
