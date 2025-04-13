@@ -53,7 +53,7 @@ bool queue_full(Queue *q);
  * @param newItem A mensagem a ser inserida.
  * @return true se a mensagem foi inserida, falso caso contrário. 
  */
-bool enqueue(Queue *q, int newItem);
+bool enqueue(Queue *q, Mensagem newItem);
 
 /**
  * Remove a mensagem no início da fila.
