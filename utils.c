@@ -28,8 +28,8 @@ int makeSocket(struct sockaddr_in si_me, int port){
     return s;
 }
 
-void readEnlaces(uint i, FILE *file){
-    uint roteador1, roteador2, enlace;
+void readEnlaces(int i, FILE *file){
+    int roteador1, roteador2, enlace;
     // para entender melhor só descomentar esses printf
     // 2 x (2 char id) + 4 char enlace + 2 char espaço + 1 \n
     char linha[11];
@@ -39,7 +39,7 @@ void readEnlaces(uint i, FILE *file){
         if(!fgets(linha, 11, file)){ 
             // printf("\nagr to alocando ");
 
-            // printf("%u \n",i);
+            // printf("%d \n",i);
             // se chegou aqui significa q lemos todo o arquivo, alocamos espaço para todos roteadores vizinhos 
             roteadores = (Roteador *)malloc(sizeof(Roteador) * i);
             // finaliza a recursão 
@@ -47,35 +47,45 @@ void readEnlaces(uint i, FILE *file){
             return ;
         };
         // separa a linha lida 
-        sscanf(linha, "%u %u %u", &roteador1, &roteador2, &enlace);
+        sscanf(linha, "%d %d %d", &roteador1, &roteador2, &enlace);
         // printf("l: %s",linha);
     } while (roteador1 != nucleo.id && roteador2 != nucleo.id );
     
     // se o roteador atual faz parte do enlace ele para aqui e chama a função +1
     readEnlaces(i + 1, file);
-    // printf("es: %u %u %u\n", roteador1, roteador2, enlace);
+    // printf("es: %d %d %d\n", roteador1, roteador2, enlace);
     roteadores[i].id = roteador1 ^ roteador2 ^ nucleo.id ;
     roteadores[i].enlace = enlace;
 }
 
-void readRoteadores(uint max, FILE *file){
+void readRoteadores(int max, FILE *file){
     int hit = max;
-    uint id, porta;
+    int id, porta;
     // 2 char id + 6 char porta + 15 char ip + 2 char espaco + 1 \n
     char linha[26], ip[16];
     while(fgets(linha, 26, file) && hit){
-        sscanf(linha, "%u %u %s", &id, &porta, ip);
-        for (uint i = 0; i < max + 1; i++){
-            if(nucleo.id == id) {
-                strncpy(nucleo.endereco.ip, ip, 16);
-                nucleo.endereco.porta = porta;
-            }
-            if(roteadores[i].id != id) continue;
+        sscanf(linha, "%d %d %s", &id, &porta, ip);
 
-            strncpy(roteadores[i].endereco.ip, ip, 16);
-            roteadores[i].endereco.porta = porta;
-            hit--;
-            break;
+        if(nucleo.id == id) {
+            strncpy(nucleo.endereco.ip, ip, 16);
+            nucleo.endereco.porta = porta;
+            continue;
         }
+        Roteador *r = findById(id);
+        if(!r) continue;
+
+        strncpy(r->endereco.ip, ip, 16);
+        r->endereco.porta = porta;
+        hit--;
+        break;
     }
+}
+
+inline int cmp(const void *a, const void *b) {
+    return ((Roteador *)a)->id - ((Roteador *)b)->id;
+}
+
+Roteador *findById(int id) {
+    Roteador chave = {.id = id};
+    return bsearch(&chave, roteadores, nucleo.qtdVizinhos, sizeof(Roteador), cmp);
 }
