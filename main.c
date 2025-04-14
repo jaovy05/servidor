@@ -37,6 +37,8 @@ int main(int argc, char *argv[]){
     readEnlaces(0, f);
     fclose(f);
 
+    qsort(roteadores, nucleo.qtdVizinhos, sizeof(Roteador), cmp);
+
     if((f = fopen("roteador.config", "r")) == NULL) die("Erro ao abrir roteador.config");
     readRoteadores(nucleo.qtdVizinhos, f);
     fclose(f);
@@ -68,26 +70,23 @@ void *sender(void *socket) {
     Mensagem msg;
    
     msg.fonte = nucleo.endereco;
-    uint id;
+    int id;
     char buffer[BUFLEN + 3];
 
     while (1){
         printf("Informe a mensagem no formato: <id> <msg>\n");
        // fflush(stdout);    
         fgets(buffer, BUFLEN + 3, stdin);
-        if (sscanf(buffer, "%u %[^\n]", &id, msg.data) != 2) {
+        if (sscanf(buffer, "%d %[^\n]", &id, msg.data) != 2) {
             perror("Formato inválido. Use: <id> <mensagem>\n");
             continue;
         }
 
         msg.tipoMensagem = DADOS;
 
-        uint i = 0;
-        for (; i < nucleo.qtdVizinhos; i++) {
-            if(roteadores[i].id == id) break;
-        }
+        Roteador *r = findById(id);
 
-        msg.destino = roteadores[i].endereco;
+        msg.destino = r ? r->endereco : nucleo.prox->endereco;
         si_other.sin_port = htons(msg.destino.porta);
         
         if (sendto(s, &msg, sizeof(msg), 0 ,(struct sockaddr *) &si_other, sizeof(si_other))==-1) die("sendto()");
