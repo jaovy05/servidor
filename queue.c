@@ -1,4 +1,5 @@
 #include "queue.h"
+#include <stdio.h>
 
 void init_queue(Queue *q) {
     q->front = 0;
@@ -15,7 +16,7 @@ bool queue_full(Queue *q) {
 
 bool enqueue(Queue *q, Mensagem newItem) {
     if(queue_full(q)) {
-        printf("Queue is full.");
+        printf("Queue is full.\n");
         return false;
     }
 
@@ -26,7 +27,7 @@ bool enqueue(Queue *q, Mensagem newItem) {
 
 bool dequeue(Queue *q) {
     if(queue_empty(q)) {
-        printf("Queue is empty");
+        printf("Queue is empty.\n");
         return false;
     }
 
