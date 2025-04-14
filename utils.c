@@ -4,8 +4,7 @@
 #include "utils.h"
 #include <stdio.h>
 #include <string.h> //memset
-
-uint id = 2;
+#include "mensagens.h"
 
 void die(char *s)
 {
@@ -29,13 +28,12 @@ int makeSocket(struct sockaddr_in si_me, int port){
     return s;
 }
 
-static uint roteador1, roteador2;
-// 2 x (2 char id) + 4 char enlace + 2 char espaço + 1 \n
-static char linha[11];
-
 void readEnlaces(uint i, FILE *file){
-    uint enlace;
+    uint roteador1, roteador2, enlace;
     // para entender melhor só descomentar esses printf
+    // 2 x (2 char id) + 4 char enlace + 2 char espaço + 1 \n
+    char linha[11];
+
     do {
     
         if(!fgets(linha, 11, file)){ 
@@ -45,32 +43,34 @@ void readEnlaces(uint i, FILE *file){
             // se chegou aqui significa q lemos todo o arquivo, alocamos espaço para todos roteadores vizinhos 
             roteadores = (Roteador *)malloc(sizeof(Roteador) * i);
             // finaliza a recursão 
-            return ;
+            nucleo.qtdVizinhos = i;
         };
         // separa a linha lida 
         sscanf(linha, "%u %u %u", &roteador1, &roteador2, &enlace);
         // printf("l: %s",linha);
-    } while (roteador1 != id && roteador2 != id);
+    } while (roteador1 != nucleo.id && roteador2 != nucleo.id );
     
     // se o roteador atual faz parte do enlace ele para aqui e chama a função +1
     readEnlaces(i + 1, file);
     // printf("es: %u %u %u\n", roteador1, roteador2, enlace);
-    
+    roteadores[i].id = roteador1 ^ roteador2 ^ nucleo.id ;
     roteadores[i].enlace = enlace;
 }
 
-// void readRoteadores(uint i, FILE *file){
-//     // 2 byte id + 6 byte porta + 15 bytes ip + 2 byte espaco + 1 \n
-//     char linha[26];
-//     fgets(linha, 26, file);
-//     linha[strcspn(linha, "\n")] = 0; // corta pra fora
+void readRoteadores(uint max, FILE *file){
+    int hit = max;
+    uint id, porta;
+    // 2 char id + 6 char porta + 15 char ip + 2 char espaco + 1 \n
+    char linha[26], ip[16];
+    while(fgets(linha, 26, file) && hit){
+        sscanf(linha, "%u %u %s", &id, &porta, ip);
+        for (uint i = 0; i < max; i++){
+            if(roteadores[i].id != id) continue;
 
-//     char token = strtok(linha, " ");
-//     int id = atoi(token);
-
-//     char token = strtok(linha, " ");
-//     int porta = atoi(token);
-
-//     char token = strtok(linha, " ");
-//     int ip = atoi(token);
-// }
+            strncpy(roteadores[i].endereco.ip, ip, 16);
+            roteadores[i].endereco.porta = porta;
+            hit--;
+            break;
+        }
+    }
+}

@@ -1,4 +1,5 @@
 
+#include "utils.h"
 
 #ifndef F_MENSAGENS
 #define F_MENSAGENS
@@ -6,7 +7,7 @@
 typedef struct endereco
 {
     char ip[16];
-    int porta;
+    uint porta;
 } Endereco;
 
 #define CONTROLE 0
@@ -24,8 +25,18 @@ typedef struct mensagem
 typedef struct roteador
 {
     Endereco endereco;
-    char id;
-    int enlace;
+    uint id;
+    uint enlace;
 } Roteador;
+
+typedef struct roteadorNucleo
+{
+    Endereco endereco;
+    uint id;
+    uint qtdVizinhos;
+} RoteadorNucleo;
+
+extern Roteador *roteadores;
+extern RoteadorNucleo nucleo;
 
 #endif // F_MENSAGENS
