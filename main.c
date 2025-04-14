@@ -1,7 +1,4 @@
-/*
-    Simple udp server
-    Silver Moon (m00n.silv3r@gmail.com)
-*/
+
 #include <stdio.h> //printf
 #include <string.h> //memset
 #include <stdlib.h> //exit(0);
@@ -37,6 +34,7 @@ int main(int argc, char *argv[]){
 
     FILE *f;
     if((f = fopen("enlaces.config", "r")) == NULL) die("Erro ao abrir enlaces.config");
+    readEnlaces(0, f);
     fclose(f);
 
     if((f = fopen("roteador.config", "r")) == NULL) die("Erro ao abrir roteador.config");
@@ -70,17 +68,28 @@ void *sender(void *socket) {
     Mensagem msg;
    
     msg.fonte = nucleo.endereco;
-    si_other.sin_port = htons(34534);
+    uint id;
+    char buffer[BUFLEN + 3];
 
     while (1){
-        printf("digita aí vai");
-        fflush(stdin);
-        scanf("%s", msg.data);
+        printf("Informe a mensagem no formato: <id> <msg>\n");
+       // fflush(stdout);    
+        fgets(buffer, BUFLEN + 3, stdin);
+        if (sscanf(buffer, "%u %[^\n]", &id, msg.data) != 2) {
+            perror("Formato inválido. Use: <id> <mensagem>\n");
+            continue;
+        }
+
         msg.tipoMensagem = DADOS;
 
-        strcpy(msg.destino.ip, "127.0.0.1");
-        msg.destino.porta = 12345;
+        uint i = 0;
+        for (; i < nucleo.qtdVizinhos; i++) {
+            if(roteadores[i].id == id) break;
+        }
 
+        msg.destino = roteadores[i].endereco;
+        si_other.sin_port = htons(msg.destino.porta);
+        
         if (sendto(s, &msg, sizeof(msg), 0 ,(struct sockaddr *) &si_other, sizeof(si_other))==-1) die("sendto()");
         
     }
