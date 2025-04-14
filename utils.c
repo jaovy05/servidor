@@ -44,6 +44,7 @@ void readEnlaces(uint i, FILE *file){
             roteadores = (Roteador *)malloc(sizeof(Roteador) * i);
             // finaliza a recursão 
             nucleo.qtdVizinhos = i;
+            return ;
         };
         // separa a linha lida 
         sscanf(linha, "%u %u %u", &roteador1, &roteador2, &enlace);
@@ -64,7 +65,11 @@ void readRoteadores(uint max, FILE *file){
     char linha[26], ip[16];
     while(fgets(linha, 26, file) && hit){
         sscanf(linha, "%u %u %s", &id, &porta, ip);
-        for (uint i = 0; i < max; i++){
+        for (uint i = 0; i < max + 1; i++){
+            if(nucleo.id == id) {
+                strncpy(nucleo.endereco.ip, ip, 16);
+                nucleo.endereco.porta = porta;
+            }
             if(roteadores[i].id != id) continue;
 
             strncpy(roteadores[i].endereco.ip, ip, 16);
