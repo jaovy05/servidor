@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include "mensagens.h"
 #include "utils.h"
+#include "queue.h"
 
 #define BUFLEN 101  //Max length of buffer
 
@@ -31,7 +32,7 @@ int main(int argc, char *argv[]){
         die(buffer);
     }
     nucleo.id = atoi(argv[1]);
-
+    
     FILE *f;
     if((f = fopen("enlaces.config", "r")) == NULL) die("Erro ao abrir enlaces.config");
     readEnlaces(0, f);
@@ -54,8 +55,7 @@ int main(int argc, char *argv[]){
     pthread_create(&t_receiver, NULL, receiver, &sock);
     pthread_create(&t_sender, NULL, sender, &sock);
 
-    pthread_join(t_receiver, NULL); // para n encerrar a thread principal sem as outras encerrarem 
-    pthread_join(t_sender, NULL);    
+    pthread_join(t_sender, NULL);    // sender decide se o programa encerra 
     
     close(sock);
     return 0;
@@ -70,12 +70,23 @@ void *sender(void *socket) {
     Mensagem msg;
    
     msg.fonte = nucleo.endereco;
-    int id;
+    int id, op;
     char buffer[BUFLEN + 3];
 
     while (1){
+        printf("+--------------------------------------+\n");
+        printf("| %-37s|\n", "Escolha uma opção");
+        printf("| %-37s|\n", "0 - Digitar uma mensagem");
+        printf("| %-37s|\n", "1 - Sair");
+        printf("+--------------------------------------+\n");
+
+        scanf("%d", &op);
+        if(op) return NULL;
+        
+        while (getchar() != '\n'); // limpa o buffer
+
         printf("Informe a mensagem no formato: <id> <msg>\n");
-       // fflush(stdout);    
+        fflush(stdout);    
         fgets(buffer, BUFLEN + 3, stdin);
         if (sscanf(buffer, "%d %[^\n]", &id, msg.data) != 2) {
             perror("Formato inválido. Use: <id> <mensagem>\n");
@@ -85,8 +96,9 @@ void *sender(void *socket) {
         msg.tipoMensagem = DADOS;
 
         Roteador *r = findById(id);
+        if(!r) printf("Roteador não existe ou não é vizinho");
 
-        msg.destino = r ? r->endereco : nucleo.prox->endereco;
+        msg.destino = r->endereco;
         si_other.sin_port = htons(msg.destino.porta);
         
         if (sendto(s, &msg, sizeof(msg), 0 ,(struct sockaddr *) &si_other, sizeof(si_other))==-1) die("sendto()");
