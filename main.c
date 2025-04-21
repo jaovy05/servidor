@@ -6,17 +6,21 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include "mensagens.h"
 #include "utils.h"
 #include "queue.h"
 
 #define BUFLEN 101  //Max length of buffer
 
-Roteador *roteadores = NULL;
-RoteadorNucleo nucleo;
+Roteador       *roteadores = NULL;
+RoteadorNucleo  nucleo;
+sem_t           semItens;
+pthread_mutex_t mutexFila;
+Queue           qSender;
 
 void *sender(void *socket);
-
+void *queueSender(void *queue);
 void *receiver(void *sockect){
     while (1){
 
@@ -48,6 +52,8 @@ int main(int argc, char *argv[]){
 
     // Cria o socket configurado.
     int sock = makeSocket(nucleo.endereco.porta);
+    
+    init_queue(&qSender);
 
     // Cria 1 thread para cada serviço.
     pthread_t t_receiver, t_sender, t_queue_sender;
@@ -55,21 +61,17 @@ int main(int argc, char *argv[]){
     // Seta as respectivas funções 
     pthread_create(&t_receiver, NULL, receiver, &sock);
     pthread_create(&t_sender, NULL, sender, &sock);
+    pthread_create(&t_queue_sender, NULL, queueSender, &sock);
 
     // O programa espera até a thread do sender encerrar 
     pthread_join(t_sender, NULL);    
     
+    sem_destroy(&semItens);
     close(sock);
     return 0;
 }
 
 void *sender(void *socket) {
-    struct sockaddr_in si_other;
-
-    // Zera a struct do endereço de destino
-    memset((char *) &si_other, 0, sizeof(si_other));
-    si_other.sin_family = AF_INET;
-
     // Recupera o descritor de socket passado como argumento
     int s = *(int *)socket;
 
@@ -77,7 +79,7 @@ void *sender(void *socket) {
     msg.fonte = nucleo.endereco; // Define o endereço de origem da mensagem como o núcleo
 
     int id, op;
-    char buffer[BUFLEN + 3]; // Buffer para entrada de usuário (id + espaço + mensagem
+    char buffer[BUFLEN + 3]; // Buffer para entrada de usuário (id + espaço + mensagem)
 
     while (1){
         printf("+--------------------------------------+\n");
@@ -92,6 +94,8 @@ void *sender(void *socket) {
         
         // Remove os resíduos do buffer de entrada
         while (getchar() != '\n'); 
+        // Remove os resíduos da msg anterior
+        memset(&msg, 0, sizeof(Mensagem));
 
         printf("Informe a mensagem no formato: <id> <msg>\n");
         fflush(stdout);  // Garante que a mensagem seja impressa imediatamente
@@ -109,16 +113,50 @@ void *sender(void *socket) {
         Roteador *r = findById(id);
         if(!r) printf("Roteador não existe ou não é vizinho");
 
-        memset(&msg, 0, sizeof(Mensagem)); // reset na var antes do uso
         // Seta o tipo da mensagem e o endereço do destino
         msg.tipoMensagem = DADOS;
 
         msg.destino = r->endereco;
-        si_other.sin_port = htons(msg.destino.porta);
-        // Envia a mensagem para o roteador
-        if (sendto(s, &msg, sizeof(msg), 0 ,(struct sockaddr *) &si_other, sizeof(si_other))==-1) die("sendto()");
         
+        // protege a fila antes de alterar 
+        pthread_mutex_lock(&mutexFila);
+        enqueue(&qSender, msg);
+        pthread_mutex_unlock(&mutexFila);
+
+        // incrementa o semaforo avisando que tem +1 item na fila
+        sem_post(&semItens);
     }
 
+    return NULL;
+}
+
+void *queueSender(void *socket) {
+    // Recupera o descritor de socket passado como argumento
+    int s = *(int *)socket;
+    Mensagem *msg;
+    struct sockaddr_in si_other;
+
+    while (1) {
+        // Evita de consumir CPU se a fila estiver vazia
+        sem_wait(&semItens); 
+        
+        // protege a nossa querida fila 
+        pthread_mutex_lock(&mutexFila);
+        // pega a primeira mensagem da fila
+        msg = &qSender.queue[qSender.front];
+        // tira da fila
+        dequeue(&qSender);
+        // libera a fila
+        pthread_mutex_unlock(&mutexFila);
+
+        memset(&si_other, 0, sizeof(si_other));
+        // configuração do destino, ip4, porta, e ip enviado
+        si_other.sin_family = AF_INET;
+        si_other.sin_port = htons(msg->destino.porta);
+        si_other.sin_addr.s_addr = inet_addr(msg->destino.ip);
+
+        if (sendto(s, msg, sizeof(Mensagem), 0, (struct sockaddr*)&si_other, sizeof(si_other)) == -1)  perror("Erro ao enviar mensagem");
+        
+    }
     return NULL;
 }
