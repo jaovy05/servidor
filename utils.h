@@ -22,14 +22,6 @@ void die(char *s);
 int makeSocket(int port);
 
 /**
- * Lê os dados dos roteadores conectados a partir de um arquivo,
- * preenchendo o endereço IP e a porta.
- *
- * @param file Ponteiro para o arquivo contendo os dados dos roteadores.
- */
-void readRoteadores(FILE *file);
-
-/**
  * Lê os enlaces do roteador principal a partir de um arquivo,
  * alocando memória dinamicamente para os roteadores conectados
  * e salvando as informações de enlace na estrutura apropriada.
@@ -38,6 +30,14 @@ void readRoteadores(FILE *file);
  * @param file Ponteiro para o arquivo que contém os enlaces.
  */
 void readEnlaces(int i, FILE *file);
+
+/**
+ * Lê os dados dos roteadores conectados a partir de um arquivo,
+ * preenchendo o endereço IP e a porta.
+ *
+ * @param file Ponteiro para o arquivo contendo os dados dos roteadores.
+ */
+void readRoteadores(FILE *file);
 
 /**
  * Compara dois roteadores pelo ID.
