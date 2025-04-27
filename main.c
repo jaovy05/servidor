@@ -1,4 +1,3 @@
-
 #include <stdio.h> //printf
 #include <string.h> //memset
 #include <stdlib.h> //exit(0);
@@ -19,15 +18,14 @@ sem_t           semItens;
 pthread_mutex_t mutexFila;
 Queue           qSender;
 
+Queue           qReceiver;
+pthread_mutex_t mutexFilaReceiver;
+sem_t           semItensReceiver;
+
 void *sender(void *socket);
 void *queueSender(void *queue);
-void *receiver(void *sockect){
-    while (1){
-
-    }
-    return NULL;
-}
-
+void *receiver(void *sockect);
+void *packet_handler(void *socket);
 
 int main(int argc, char *argv[]){
     if(argc != 2){ 
@@ -55,13 +53,18 @@ int main(int argc, char *argv[]){
     
     init_queue(&qSender);
 
+    init_queue(&qReceiver);
+    pthread_mutex_init(&mutexFilaReceiver, NULL);
+    sem_init(&semItensReceiver, 0, 0);
+
     // Cria 1 thread para cada serviço.
-    pthread_t t_receiver, t_sender, t_queue_sender;
+    pthread_t t_receiver, t_sender, t_queue_sender, t_packet_handler;
 
     // Seta as respectivas funções 
     pthread_create(&t_receiver, NULL, receiver, &sock);
     pthread_create(&t_sender, NULL, sender, &sock);
     pthread_create(&t_queue_sender, NULL, queueSender, &sock);
+    pthread_create(&t_packet_handler, NULL, packet_handler, &sock);
 
     // O programa espera até a thread do sender encerrar 
     pthread_join(t_sender, NULL);    
@@ -157,6 +160,62 @@ void *queueSender(void *socket) {
 
         if (sendto(s, msg, sizeof(Mensagem), 0, (struct sockaddr*)&si_other, sizeof(si_other)) == -1)  perror("Erro ao enviar mensagem");
         
+    }
+    return NULL;
+}
+
+void *receiver(void *socket) {
+    // Recupera o descritor de socket passado como argumento
+    int s = *(int *)socket;
+    Mensagem msg;
+    struct sockaddr_in si_other;
+    socklen_t slen = sizeof(si_other);
+
+    while (1) {
+        memset(&msg, 0, sizeof(msg)); // Limpa a estrutura da mensagem
+
+        // Espera e recebe uma mensagem do socket UDP
+        int recv_len = recvfrom(s, &msg, sizeof(msg), 0, (struct sockaddr *)&si_other, &slen);
+        if (recv_len == -1) {
+            perror("Erro ao receber mensagem");
+            continue;
+        }
+
+        // Protege a fila de entrada antes de inserir a nova mensagem
+        pthread_mutex_lock(&mutexFilaReceiver);
+        enqueue(&qReceiver, msg);
+        pthread_mutex_unlock(&mutexFilaReceiver);
+
+        // Sinaliza que há uma nova mensagem na fila de entrada
+        sem_post(&semItensReceiver);
+
+        // Imprime informações sobre a mensagem recebida
+        printf("[Receiver] Mensagem recebida de %s:%d\n", inet_ntoa(si_other.sin_addr), ntohs(si_other.sin_port));
+    }
+
+    return NULL;
+}
+
+void *packet_handler(void *socket) {
+    while (1) {
+        // Aguarda até que haja uma mensagem disponível na fila de entrada
+        sem_wait(&semItensReceiver);
+
+        // Protege a fila de entrada antes de acessar a mensagem
+        pthread_mutex_lock(&mutexFilaReceiver);
+        Mensagem *msg = &qReceiver.queue[qReceiver.front];
+        dequeue(&qReceiver); // Remove da fila
+        pthread_mutex_unlock(&mutexFilaReceiver);
+
+        // Verifica se a mensagem é destinada a este roteador
+        if (msg->destino.porta == nucleo.endereco.porta &&
+            strcmp(msg->destino.ip, nucleo.endereco.ip) == 0) {
+            // Trata localmente a mensagem recebida
+            printf("[Packet Handler] Mensagem recebida para o roteador destino: %s\n", msg->data);
+        } else {
+            // A mensagem não é para este roteador (não implementamos o reencaminhamento ainda)
+            printf("[Packet Handler] Mensagem recebida e não é o roteador destino => Ignorando.\n");
+        }
     }
     return NULL;
 }
