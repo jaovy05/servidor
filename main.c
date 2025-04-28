@@ -115,6 +115,11 @@ void *sender(void *socket) {
             continue;
         }
 
+        // Seta o id do destino
+        msg.destinoId = id;
+        // Seta o id da fonte
+        msg.fonteId = nucleo.id;
+
         // Procura o roteador informado
         Roteador *r = findById(id);
         if(!r) printf("Roteador não existe ou não é vizinho");
@@ -123,6 +128,11 @@ void *sender(void *socket) {
         msg.tipoMensagem = DADOS;
 
         msg.destino = r->endereco;
+
+        // Seta o id do destino
+        msg.destinoId = id;
+        // Seta o id da fonte
+        msg.fonteId = nucleo.id;
         
         // protege a fila antes de alterar 
         pthread_mutex_lock(&mutexFila);
@@ -144,7 +154,7 @@ void *queueSender(void *socket) {
 
     while (1) {
         // Evita de consumir CPU se a fila estiver vazia
-        sem_wait(&semItens); 
+        sem_wait(&semItensReceiver); 
         
         // protege a nossa querida fila 
         pthread_mutex_lock(&mutexFilaReceiver);
