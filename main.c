@@ -52,6 +52,8 @@ int main(int argc, char *argv[]){
     int sock = makeSocket(nucleo.endereco.porta);
     
     init_queue(&qSender);
+    pthread_mutex_init(&mutexFila, NULL);
+    sem_init(&semItens, 0, 0);
 
     init_queue(&qReceiver);
     pthread_mutex_init(&mutexFilaReceiver, NULL);
