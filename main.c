@@ -14,9 +14,10 @@
 
 Roteador       *roteadores = NULL;
 RoteadorNucleo  nucleo;
-sem_t           semItens;
-pthread_mutex_t mutexFila;
+
 Queue           qSender;
+pthread_mutex_t mutexFila;
+sem_t           semItens;
 
 Queue           qReceiver;
 pthread_mutex_t mutexFilaReceiver;
@@ -146,13 +147,13 @@ void *queueSender(void *socket) {
         sem_wait(&semItens); 
         
         // protege a nossa querida fila 
-        pthread_mutex_lock(&mutexFila);
+        pthread_mutex_lock(&mutexFilaReceiver);
         // pega a primeira mensagem da fila
-        msg = &qSender.queue[qSender.front];
+        msg = &qReceiver.queue[qReceiver.front];
         // tira da fila
-        dequeue(&qSender);
+        dequeue(&qReceiver);
         // libera a fila
-        pthread_mutex_unlock(&mutexFila);
+        pthread_mutex_unlock(&mutexFilaReceiver);
 
         memset(&si_other, 0, sizeof(si_other));
         // configuração do destino, ip4, porta, e ip enviado
@@ -161,8 +162,8 @@ void *queueSender(void *socket) {
         si_other.sin_addr.s_addr = inet_addr(msg->destino.ip);
 
         if (sendto(s, msg, sizeof(Mensagem), 0, (struct sockaddr*)&si_other, sizeof(si_other)) == -1)  perror("Erro ao enviar mensagem");
-        
     }
+
     return NULL;
 }
 
@@ -209,15 +210,33 @@ void *packet_handler(void *socket) {
         dequeue(&qReceiver); // Remove da fila
         pthread_mutex_unlock(&mutexFilaReceiver);
 
-        // Verifica se a mensagem é destinada a este roteador
-        if (msg->destino.porta == nucleo.endereco.porta &&
-            strcmp(msg->destino.ip, nucleo.endereco.ip) == 0) {
-            // Trata localmente a mensagem recebida
-            printf("[Packet Handler] Mensagem recebida para o roteador destino: %s\n", msg->data);
+        // Verifica se a mensagem é destinada ao roteador vizinho ou ao próprio roteador
+        Roteador *r = findById(msg->destinoId);
+
+        if (r) {
+            // Se o destino for um roteador vizinho
+            printf("[Packet Handler] Mensagem recebida e o destino é um roteador vizinho (ID: %d)\n", msg->destinoId);
+
+            // Protege a fila de saída antes de inserir a mensagem
+            pthread_mutex_lock(&mutexFila);
+            enqueue(&qSender, *msg);  // Adiciona a mensagem à fila
+            pthread_mutex_unlock(&mutexFila);
+
+            // Incrementa o semáforo sinalizando que há uma nova mensagem na fila
+            sem_post(&semItens);
+
+        } else if(msg->destinoId == nucleo.id) {
+            // Se o destino for o próprio roteador
+            printf("[Packet Handler] Mensagem recebida para o roteador destino (ID: %d). Imprimindo mensagem...\n", msg->destinoId);
+            
+            // Imprime o conteúdo da mensagem
+            printf("[Packet Handler] Mensagem para o roteador destino: %s\n", msg->data);
+            
         } else {
-            // A mensagem não é para este roteador (não implementamos o reencaminhamento ainda)
-            printf("[Packet Handler] Mensagem recebida e não é o roteador destino => Ignorando.\n");
+            // A mensagem não é para este roteador nem para um roteador vizinho
+            printf("[Packet Handler] Mensagem recebida e não é o roteador destino nem um vizinho => Erro: Mensagem inválida.\n");
         }
     }
+
     return NULL;
 }
