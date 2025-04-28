@@ -61,10 +61,10 @@ void readRoteadores(FILE *file){
     // Variável de parada.
     int hit = nucleo.qtdVizinhos;
     int id, porta;
-    // 2 char id + 6 char porta + 15 char ip + 2 char espaco + 1 \n.
-    char linha[26], ip[16];
+    // 2 char id + 5 char porta + 15 char ip + 2 char espaco + 1 \n.
+    char linha[25], ip[16];
     while(hit){
-        fgets(linha, 26, file);
+        fgets(linha, 25, file);
         sscanf(linha, "%d %d %s", &id, &porta, ip);
 
         // Se for o próprio núcleo, atualiza o endereço
