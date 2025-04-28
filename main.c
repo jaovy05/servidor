@@ -154,16 +154,16 @@ void *queueSender(void *socket) {
 
     while (1) {
         // Evita de consumir CPU se a fila estiver vazia
-        sem_wait(&semItensReceiver); 
+        sem_wait(&semItens); 
         
         // protege a nossa querida fila 
-        pthread_mutex_lock(&mutexFilaReceiver);
+        pthread_mutex_lock(&mutexFila);
         // pega a primeira mensagem da fila
-        msg = &qReceiver.queue[qReceiver.front];
+        msg = &qSender.queue[qSender.front];
         // tira da fila
-        dequeue(&qReceiver);
+        dequeue(&qSender);
         // libera a fila
-        pthread_mutex_unlock(&mutexFilaReceiver);
+        pthread_mutex_unlock(&mutexFila);
 
         memset(&si_other, 0, sizeof(si_other));
         // configuração do destino, ip4, porta, e ip enviado
