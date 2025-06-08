@@ -63,5 +63,24 @@ typedef struct roteadorNucleo {
 extern Roteador *roteadores; /**< Ponteiro para o vetor de roteadores vizinhos conhecidos. */
 extern RoteadorNucleo nucleo; /**< Estrutura que representa o próprio roteador núcleo. */
 
+/**
+ * @brief Representa os vizinhos do roteador e o custo de cada conexão.
+ *
+ * Guarda o id do roteador destino, e o custo.
+ */
+typedef struct {
+    int idDestino;
+    int custo;
+} EntradaVetor;
+
+/**
+ * @brief Representa os vizinhos do roteador e o custo de cada conexão.
+ *
+ * Guarda o id do roteador destino, e o custo.
+ */
+typedef struct {
+    int idVizinho;
+    EntradaVetor *vetor;  // tamanho = totalRoteadores
+} RegistroVizinho;
 
 #endif // F_MENSAGENS
