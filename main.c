@@ -11,9 +11,13 @@
 #include "queue.h"
 
 #define BUFLEN 101  //Max length of buffer
+#define INF 9999    //Não há caminho para o roteador
 
-Roteador       *roteadores = NULL;
+Roteador        *roteadores = NULL;
 RoteadorNucleo  nucleo;
+EntradaVetor    *vetorDistancia;
+RegistroVizinho *historico;
+int totalRoteadores;
 
 Queue           qSender;
 pthread_mutex_t mutexFila;
@@ -27,6 +31,11 @@ void *sender(void *socket);
 void *queueSender(void *queue);
 void *receiver(void *sockect);
 void *packet_handler(void *socket);
+void init_vetor_distancia();
+void init_historico_vizinhos();
+void atualiza_vetor_distancia();
+void *vetor_sender(void *arg);
+void tratar_controle(Mensagem *msg);
 
 int main(int argc, char *argv[]){
     if(argc != 2){ 
@@ -49,6 +58,17 @@ int main(int argc, char *argv[]){
     readRoteadores(f); // Salva os endereços dos roteadores.
     fclose(f); // Fecha o arquivo.
 
+    totalRoteadores = 0;
+    int id, porta;
+    char ip[16];
+    f = fopen("roteador.config", "r");
+    while (fscanf(f, "%d %d %s", &id, &porta, ip) == 3)
+        totalRoteadores++;  // Salva a quantidade total de roteadores
+    fclose(f);
+
+    init_vetor_distancia();
+    init_historico_vizinhos();
+
     // Cria o socket configurado.
     int sock = makeSocket(nucleo.endereco.porta);
     
@@ -61,13 +81,14 @@ int main(int argc, char *argv[]){
     sem_init(&semItensReceiver, 0, 0);
 
     // Cria 1 thread para cada serviço.
-    pthread_t t_receiver, t_sender, t_queue_sender, t_packet_handler;
+    pthread_t t_receiver, t_sender, t_queue_sender, t_packet_handler, t_vetor_sender;
 
     // Seta as respectivas funções 
     pthread_create(&t_receiver, NULL, receiver, &sock);
     pthread_create(&t_sender, NULL, sender, &sock);
     pthread_create(&t_queue_sender, NULL, queueSender, &sock);
     pthread_create(&t_packet_handler, NULL, packet_handler, &sock);
+    pthread_create(&t_vetor_sender, NULL, vetor_sender, &sock);
 
     // O programa espera até a thread do sender encerrar 
     pthread_join(t_sender, NULL);    
@@ -92,11 +113,25 @@ void *sender(void *socket) {
         printf("| %-39s|\n", "Escolha uma opção");
         printf("| %-37s|\n", "0 - Digitar uma mensagem");
         printf("| %-37s|\n", "1 - Sair");
+        printf("| %-37s|\n", "2 - Mostrar vetores recebidos");
         printf("+--------------------------------------+\n");
 
         // Lê a opção do usuário
         scanf("%d", &op);
-        if (op) return NULL;  // Se for 1, encerra a thread
+        if (op == 1) return NULL;  // Se for 1, encerra a thread
+
+        if (op == 2) {
+            for (int i = 0; i < nucleo.qtdVizinhos; i++) {
+                printf("Vizinho %d: [", historico[i].idVizinho);
+                for (int j = 0; j < totalRoteadores; j++) {
+                    printf("(%d, %d)%s",
+                        historico[i].vetor[j].idDestino,
+                        historico[i].vetor[j].custo,
+                        (j < totalRoteadores - 1) ? ", " : "]\n");
+                }
+            }
+            continue;
+        }
         
         // Remove os resíduos do buffer de entrada
         while (getchar() != '\n'); 
@@ -223,6 +258,11 @@ void *packet_handler(void *socket) {
         // Verifica se a mensagem é destinada ao roteador vizinho ou ao próprio roteador
         Roteador *r = findById(msg->destinoId);
 
+        if (msg->tipoMensagem == CONTROLE) {
+            tratar_controle(msg);
+            continue;
+        }
+
         if (r) {
             // Se o destino for um roteador vizinho
             printf("[Packet Handler] Mensagem recebida e o destino é um roteador vizinho (ID: %d)\n", msg->destinoId);
@@ -249,4 +289,130 @@ void *packet_handler(void *socket) {
     }
 
     return NULL;
+}
+
+void init_vetor_distancia() {
+    vetorDistancia = malloc(sizeof(EntradaVetor) * totalRoteadores);
+
+    for (int i = 0; i < totalRoteadores; i++) {
+        vetorDistancia[i].idDestino = i;
+        vetorDistancia[i].custo = (i == nucleo.id) ? 0 : INF;
+    }
+
+    for (int i = 0; i < nucleo.qtdVizinhos; i++) {
+        int idVizinho = roteadores[i].id;
+        vetorDistancia[idVizinho].custo = roteadores[i].enlace;
+    }
+}
+
+void init_historico_vizinhos() {
+    historico = malloc(sizeof(RegistroVizinho) * nucleo.qtdVizinhos);
+
+    for (int i = 0; i < nucleo.qtdVizinhos; i++) {
+        historico[i].idVizinho = roteadores[i].id;
+        historico[i].vetor = malloc(sizeof(EntradaVetor) * totalRoteadores);
+
+        for (int j = 0; j < totalRoteadores; j++) {
+            historico[i].vetor[j].idDestino = j;
+            historico[i].vetor[j].custo = INF;
+        }
+    }
+}
+
+void atualiza_vetor_distancia() {
+    int mudou = 0;
+
+    for (int d = 0; d < totalRoteadores; d++) {
+        if (d == nucleo.id) continue;
+
+        int menor = INF;
+
+        for (int i = 0; i < nucleo.qtdVizinhos; i++) {
+            int via = historico[i].idVizinho;
+            int custoParaVizinho = vetorDistancia[via].custo;
+            int custoDoVizinhoParaD = historico[i].vetor[d].custo;
+
+            if (custoParaVizinho != INF && custoDoVizinhoParaD != INF) {
+                int total = custoParaVizinho + custoDoVizinhoParaD;
+                if (total < menor) {
+                    menor = total;
+                }
+            }
+        }
+
+        if (vetorDistancia[d].custo != menor) {
+            vetorDistancia[d].custo = menor;
+            mudou = 1;
+        }
+    }
+
+    if (mudou) {
+        time_t now = time(NULL);
+        char *ts = ctime(&now);
+        ts[strcspn(ts, "\n")] = 0;
+        printf("[Atualiza Vetor] %s Vetor atualizado: [", ts);
+        for (int i = 0; i < totalRoteadores; i++) {
+            printf("(%d, %d)%s", vetorDistancia[i].idDestino, vetorDistancia[i].custo,
+                   (i < totalRoteadores - 1) ? ", " : "]\n");
+        }
+    }
+}
+
+void *vetor_sender(void *arg) {
+    int sock = *(int *)arg;
+
+    while (1) {
+        sleep(5); // ou use uma variável configurável
+
+        for (int i = 0; i < nucleo.qtdVizinhos; i++) {
+            Roteador *vizinho = &roteadores[i];
+
+            Mensagem msg;
+            memset(&msg, 0, sizeof(Mensagem));
+            msg.tipoMensagem = CONTROLE;
+            msg.fonteId = nucleo.id;
+            msg.fonte = nucleo.endereco;
+            msg.destinoId = vizinho->id;
+            msg.destino = vizinho->endereco;
+
+            memcpy(msg.data, vetorDistancia, sizeof(EntradaVetor) * totalRoteadores);
+
+            struct sockaddr_in si_other;
+            memset(&si_other, 0, sizeof(si_other));
+            si_other.sin_family = AF_INET;
+            si_other.sin_port = htons(vizinho->endereco.porta);
+            si_other.sin_addr.s_addr = inet_addr(vizinho->endereco.ip);
+            vetorDistancia[nucleo.id].custo = 0;
+
+
+            sendto(sock, &msg, sizeof(Mensagem), 0, (struct sockaddr *)&si_other, sizeof(si_other));
+
+            printf("[Vetor Sender] Vetor enviado para %d\n", vizinho->id);
+            printf("[Vetor Sender] Vetor local: [");
+            for (int j = 0; j < totalRoteadores; j++) {
+                printf("(%d, %d)%s", vetorDistancia[j].idDestino, vetorDistancia[j].custo,
+                       (j < totalRoteadores - 1) ? ", " : "]\n");
+            }
+
+        }
+    }
+    return NULL;
+}
+
+void tratar_controle(Mensagem *msg) {
+    EntradaVetor *vetorRecebido = (EntradaVetor *)msg->data;
+
+    for (int i = 0; i < nucleo.qtdVizinhos; i++) {
+        if (historico[i].idVizinho == msg->fonteId) {
+            memcpy(historico[i].vetor, vetorRecebido, sizeof(EntradaVetor) * totalRoteadores);
+            atualiza_vetor_distancia();
+            break;
+        }
+    }
+
+    printf("[Controle] Vetor recebido de %d: [", msg->fonteId);
+    for (int i = 0; i < totalRoteadores; i++) {
+        printf("(%d, %d)%s", vetorRecebido[i].idDestino, vetorRecebido[i].custo,
+               (i < totalRoteadores - 1) ? ", " : "]\n");
+    }
 }
