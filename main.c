@@ -17,7 +17,7 @@ Roteador        *roteadores = NULL;
 RoteadorNucleo  nucleo;
 EntradaVetor    *vetorDistancia;
 RegistroVizinho *historico;
-ConfigInfo config;
+ConfigInfo      config;
 
 Queue           qSender;
 pthread_mutex_t mutexFila;
