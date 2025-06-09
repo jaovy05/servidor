@@ -83,4 +83,15 @@ typedef struct {
     EntradaVetor *vetor;  // tamanho = totalRoteadores
 } RegistroVizinho;
 
+/**
+ * @brief Representa as configurações do .ini
+ *
+ * Guarda o total de roteadores, o valor de INF e o tempo de envio do vetor.
+ */
+typedef struct {
+    int totalRoteadores;
+    int INF;
+    int tempoVetor;
+} ConfigInfo;
+
 #endif // F_MENSAGENS

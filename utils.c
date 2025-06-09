@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h> //memset
 #include "mensagens.h"
+#include <stdlib.h> //atoi
 
 void die(char *s)
 {
@@ -91,4 +92,33 @@ Roteador *findById(int id) {
     // Cria um roteador temporário com id e faz uma busca binária
     Roteador chave = {.id = id};
     return bsearch(&chave, roteadores, nucleo.qtdVizinhos, sizeof(Roteador), cmp);
+}
+
+ConfigInfo readIni(){
+    FILE *arquivo = fopen("config.ini", "r");
+    if (arquivo == NULL) die("Erro ao abrir o arquivo");
+    
+    ConfigInfo conf = {0, 0, 0};
+    char linha[26];
+    while (fgets(linha, sizeof(linha), arquivo)) {
+        // Remove o \n se tiver
+        linha[strcspn(linha, "\n")] = 0;
+
+        // Ignora linhas em branco ou comentários
+        if (linha[0] == '\0' || linha[0] == ';' || linha[0] == '#') continue;
+       
+        char chave[16], valor[26];
+        if (sscanf(linha, "%15[^=]=%25[^\n]", chave, valor) == 2) {
+            // Remove espaços
+            while (*chave == ' ') memmove(chave, chave+1, strlen(chave));
+            while (*valor == ' ') memmove(valor, valor+1, strlen(valor));
+
+            if(!strcmp(chave, "roteadores")) conf.totalRoteadores = atoi(valor);
+            else if(!strcmp(chave, "infinito")) conf.INF = atoi(valor);
+            else if(!strcmp(chave, "tempoVetor")) conf.tempoVetor = atoi(valor);
+        }
+    }
+
+    fclose(arquivo);
+    return conf;
 }
