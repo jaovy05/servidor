@@ -64,19 +64,21 @@ extern Roteador *roteadores; /**< Ponteiro para o vetor de roteadores vizinhos c
 extern RoteadorNucleo nucleo; /**< Estrutura que representa o próprio roteador núcleo. */
 
 /**
- * @brief Representa os vizinhos do roteador e o custo de cada conexão.
+ * @brief Representa uma entrada da tabela de vetor de distância.
  *
- * Guarda o id do roteador destino, e o custo.
+ * Contém o ID do roteador de destino e o custo para alcançá-lo.
  */
 typedef struct {
     int idDestino;
     int custo;
 } EntradaVetor;
 
+
 /**
- * @brief Representa os vizinhos do roteador e o custo de cada conexão.
+ * @brief Representa um roteador vizinho e seu vetor de distâncias.
  *
- * Guarda o id do roteador destino, e o custo.
+ * Contém o ID do roteador vizinho e um vetor com os custos estimados
+ * para alcançar todos os outros roteadores da rede.
  */
 typedef struct {
     int idVizinho;
