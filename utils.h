@@ -58,4 +58,5 @@ int cmp(const void *a, const void *b);
  */
 Roteador *findById(int id);
 
+ConfigInfo readIni();
 #endif // F_UTILS

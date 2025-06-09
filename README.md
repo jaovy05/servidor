@@ -2,7 +2,7 @@
 
 ## Estrutura dos Arquivos de Configuração
 
-O programa utiliza dois arquivos de configuração:
+O programa utiliza três arquivos de configuração:
 
 ### `enlaces.config`
 Define as conexões (enlaces) entre os roteadores.
@@ -28,6 +28,17 @@ Formato esperado para cada linha:
 - **ID**: número inteiro de 1 a 99 (máximo 2 dígitos).
 - **Porta**: número inteiro de 1 a 65535 (máximo 5 dígitos).
 - **IP**: string no formato de IP (ex: `192.168.0.1`).
+
+### `config.ini`
+Define dados geral do sistema
+
+Formato esperado para cada linha:
+
+<chave> '=' <valor>
+
+- **roteadores**: número total de roteadores usados (máximo 100)
+- **infinito**: valor do infinito a ser considerado (mínimo maior caminho da rede + 1)
+- **tempoVetor**: valor em segundos para enviar o vetor distância aos seus vizinhos (mínimo 1)
 
 ---
 
