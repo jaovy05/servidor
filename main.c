@@ -291,13 +291,8 @@ void init_vetor_distancia() {
     vetorDistancia = malloc(sizeof(EntradaVetor) * config.totalRoteadores);
 
     for (int i = 0; i < config.totalRoteadores; i++) {
-        vetorDistancia[i].idDestino = i;
-        vetorDistancia[i].custo = (i == nucleo.id) ? 0 : config.INF;
-    }
-
-    for (int i = 0; i < nucleo.qtdVizinhos; i++) {
-        int idVizinho = roteadores[i].id;
-        vetorDistancia[idVizinho].custo = roteadores[i].enlace;
+        vetorDistancia[i].idDestino = i + 1;
+        vetorDistancia[i].custo = (i + 1 == nucleo.id) ? 0 : config.INF;
     }
 }
 
@@ -309,7 +304,7 @@ void init_historico_vizinhos() {
         historico[i].vetor = malloc(sizeof(EntradaVetor) * config.totalRoteadores);
 
         for (int j = 0; j < config.totalRoteadores; j++) {
-            historico[i].vetor[j].idDestino = j;
+            historico[i].vetor[j].idDestino = j + 1;
             historico[i].vetor[j].custo = config.INF;
         }
     }
@@ -319,14 +314,14 @@ void atualiza_vetor_distancia() {
     int mudou = 0;
 
     for (int d = 0; d < config.totalRoteadores; d++) {
-        if (d == nucleo.id) continue;
+        if (d + 1 == nucleo.id) continue;
 
         int menor = config.INF;
 
         for (int i = 0; i < nucleo.qtdVizinhos; i++) {
             int via = historico[i].idVizinho;
-            int custoParaVizinho = vetorDistancia[via].custo;
-            int custoDoVizinhoParaD = historico[i].vetor[d].custo;
+            int custoParaVizinho = historico[i].vetor[d].custo;
+            int custoDoVizinhoParaD = roteadores[i].enlace;
 
             if (custoParaVizinho != config.INF && custoDoVizinhoParaD != config.INF) {
                 int total = custoParaVizinho + custoDoVizinhoParaD;
@@ -335,8 +330,8 @@ void atualiza_vetor_distancia() {
                 }
             }
         }
-
-        if (vetorDistancia[d].custo != menor) {
+        
+        if (vetorDistancia[d].custo > menor) {
             vetorDistancia[d].custo = menor;
             mudou = 1;
         }
@@ -380,7 +375,6 @@ void *vetor_sender(void *arg) {
             si_other.sin_family = AF_INET;
             si_other.sin_port = htons(vizinho->endereco.porta);
             si_other.sin_addr.s_addr = inet_addr(vizinho->endereco.ip);
-            vetorDistancia[nucleo.id].custo = 0;
 
 
             sendto(sock, &msg, sizeof(Mensagem), 0, (struct sockaddr *)&si_other, sizeof(si_other));
