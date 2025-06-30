@@ -9,9 +9,14 @@
 #include "mensagens.h"
 #include "utils.h"
 #include "queue.h"
+#include <time.h>
 
 #define BUFLEN 101  //Max length of buffer
 //#define C_DEBUG 1
+
+#define TTL_SEGUNDOS 15  // tempo de vida útil em segundos
+
+time_t          *ultimaAtualizacaoVetor;
 
 Roteador        *roteadores = NULL;
 RoteadorNucleo  nucleo;
@@ -75,7 +80,7 @@ int main(int argc, char *argv[]){
     sem_init(&semItensReceiver, 0, 0);
 
     // Cria 1 thread para cada serviço.
-    pthread_t t_receiver, t_sender, t_queue_sender, t_packet_handler, t_vetor_sender;
+    pthread_t t_receiver, t_sender, t_queue_sender, t_packet_handler, t_vetor_sender, t_ttl_checker;
 
     // Seta as respectivas funções 
     pthread_create(&t_receiver, NULL, receiver, &sock);
@@ -83,6 +88,7 @@ int main(int argc, char *argv[]){
     pthread_create(&t_queue_sender, NULL, queueSender, &sock);
     pthread_create(&t_packet_handler, NULL, packet_handler, &sock);
     pthread_create(&t_vetor_sender, NULL, vetor_sender, &sock);
+    pthread_create(&t_ttl_checker, NULL, verifica_tempo_vetores, NULL);
 
     // O programa espera até a thread do sender encerrar 
     pthread_join(t_sender, NULL);    
@@ -308,6 +314,12 @@ void init_historico_vizinhos() {
             historico[i].vetor[j].custo = config.INF;
         }
     }
+
+    ultimaAtualizacaoVetor = malloc(sizeof(time_t) * nucleo.qtdVizinhos);
+
+    for (int i = 0; i < nucleo.qtdVizinhos; i++) {
+        ultimaAtualizacaoVetor[i] = time(NULL);  // começa com o tempo atual
+    }
 }
 
 void atualiza_vetor_distancia() {
@@ -398,10 +410,12 @@ void tratar_controle(Mensagem *msg) {
     for (int i = 0; i < nucleo.qtdVizinhos; i++) {
         if (historico[i].idVizinho == msg->fonteId) {
             memcpy(historico[i].vetor, vetorRecebido, sizeof(EntradaVetor) * config.totalRoteadores);
+            ultimaAtualizacaoVetor[i] = time(NULL);  // <- ATUALIZA AQUI!
             atualiza_vetor_distancia();
             break;
         }
     }
+
 
     #ifdef C_DEBUG
         printf("[Controle] Vetor recebido de %d: [", msg->fonteId);
@@ -411,3 +425,29 @@ void tratar_controle(Mensagem *msg) {
         }
     #endif
 }
+
+void *verifica_tempo_vetores(void *arg) {
+    while (1) {
+        sleep(1);  // checa a cada segundo
+
+        time_t agora = time(NULL);
+
+        for (int i = 0; i < nucleo.qtdVizinhos; i++) {
+            double diff = difftime(agora, ultimaAtualizacaoVetor[i]);
+
+            if (diff > TTL_SEGUNDOS) {
+                for (int j = 0; j < config.totalRoteadores; j++) {
+                    historico[i].vetor[j].custo = config.INF;
+                }
+                ultimaAtualizacaoVetor[i] = agora;  // evita múltiplos resets
+
+                printf("[TTL] Vetor de %d expirado após %.0f segundos. Resetado.\n",
+                       historico[i].idVizinho, diff);
+
+                atualiza_vetor_distancia();  // reavalia o vetor local
+            }
+        }
+    }
+    return NULL;
+}
+
