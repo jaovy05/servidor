@@ -60,7 +60,7 @@ void readEnlaces(int i, FILE *file){
 
 void readRoteadores(FILE *file){
     // Variável de parada.
-    int hit = nucleo.qtdVizinhos;
+    int hit = nucleo.qtdVizinhos + 1;
     int id, porta;
     // 2 char id + 5 char porta + 15 char ip + 2 char espaco + 1 \n.
     char linha[25], ip[16];
@@ -72,6 +72,7 @@ void readRoteadores(FILE *file){
         if(nucleo.id == id) {
             strncpy(nucleo.endereco.ip, ip, 16);
             nucleo.endereco.porta = porta;
+            hit--;
             continue;
         }
         Roteador *r = findById(id);
