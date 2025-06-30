@@ -28,7 +28,6 @@ typedef struct mensagem {
     char tipoMensagem; /**< Tipo da mensagem (CONTROLE ou DADOS). */
     char data[200];    /**< Conteúdo da mensagem (texto). */
     int destinoId;     /**< Identificador único do roteador destino. */ 
-    Endereco destino;  /**< Endereço de destino da mensagem. */
     int fonteId;       /**< Identificador único do roteador fonte. */ 
     Endereco fonte;    /**< Endereço de origem da mensagem. */
 } Mensagem;

@@ -21,6 +21,7 @@ time_t          *ultimaAtualizacaoVetor;
 Roteador        *roteadores = NULL;
 RoteadorNucleo  nucleo;
 EntradaVetor    *vetorDistancia;
+int             *melhorCaminho;
 RegistroVizinho *historico;
 ConfigInfo      config;
 
@@ -130,6 +131,16 @@ void *sender(void *socket) {
                         (j < config.totalRoteadores - 1) ? ", " : "]\n");
                 }
             }
+
+            printf("vetor distancia: [");
+            for (int i = 0; i < config.totalRoteadores; i++) {
+                printf("(%d, %d)%s", vetorDistancia[i].idDestino, vetorDistancia[i].custo,
+                    (i < config.totalRoteadores - 1) ? ", " : "]\n");
+            }
+            printf("Caminho seguido: [");
+            for (int i = 0; i < config.totalRoteadores; i++) {
+                printf("%d%s", melhorCaminho[i], (i < config.totalRoteadores - 1) ? ", " : "]\n");
+            }
             continue;
         }
         
@@ -155,14 +166,9 @@ void *sender(void *socket) {
         // Seta o id da fonte
         msg.fonteId = nucleo.id;
 
-        // Procura o roteador informado
-        Roteador *r = findById(id);
-        if(!r) printf("Roteador não existe ou não é vizinho");
-
         // Seta o tipo da mensagem e o endereço do destino
         msg.tipoMensagem = DADOS;
 
-        msg.destino = r->endereco;
 
         // Seta o id do destino
         msg.destinoId = id;
@@ -203,8 +209,9 @@ void *queueSender(void *socket) {
         memset(&si_other, 0, sizeof(si_other));
         // configuração do destino, ip4, porta, e ip enviado
         si_other.sin_family = AF_INET;
-        si_other.sin_port = htons(msg->destino.porta);
-        si_other.sin_addr.s_addr = inet_addr(msg->destino.ip);
+        Roteador *r = findById(melhorCaminho[msg->destinoId - 1]);
+        si_other.sin_port = htons(r->endereco.porta);
+        si_other.sin_addr.s_addr = inet_addr(r->endereco.ip);
 
         if (sendto(s, msg, sizeof(Mensagem), 0, (struct sockaddr*)&si_other, sizeof(si_other)) == -1)  perror("Erro ao enviar mensagem");
     }
@@ -228,6 +235,7 @@ void *receiver(void *socket) {
             perror("Erro ao receber mensagem");
             continue;
         }
+        if(msg.tipoMensagem == DADOS) printf("[Receiver] Mensagem recebida de %s:%d\n", inet_ntoa(si_other.sin_addr), ntohs(si_other.sin_port));
 
         // Protege a fila de entrada antes de inserir a nova mensagem
         pthread_mutex_lock(&mutexFilaReceiver);
@@ -237,10 +245,6 @@ void *receiver(void *socket) {
         // Sinaliza que há uma nova mensagem na fila de entrada
         sem_post(&semItensReceiver);
 
-        #ifdef C_DEBUG
-            // Imprime informações sobre a mensagem recebida
-            printf("[Receiver] Mensagem recebida de %s:%d\n", inet_ntoa(si_other.sin_addr), ntohs(si_other.sin_port));
-        #endif
     }
 
     return NULL;
@@ -265,10 +269,15 @@ void *packet_handler(void *socket) {
             continue;
         }
 
-        if (r) {
-            // Se o destino for um roteador vizinho
-            printf("[Packet Handler] Mensagem recebida e o destino é um roteador vizinho (ID: %d)\n", msg->destinoId);
-
+        if(msg->destinoId == nucleo.id) {
+            // Se o destino for o próprio roteador
+            printf("[Packet Handler] Mensagem recebida de (ID: %d) para o roteador. Imprimindo mensagem...\n", msg->fonteId);
+            // Imprime o conteúdo da mensagem
+            printf("[Packet Handler] Mensagem para o roteador destino: %s\n", msg->data);
+            continue;
+        } 
+        int caminho = melhorCaminho[msg->destinoId - 1];
+        if(caminho != -1) {
             // Protege a fila de saída antes de inserir a mensagem
             pthread_mutex_lock(&mutexFila);
             enqueue(&qSender, *msg);  // Adiciona a mensagem à fila
@@ -276,17 +285,6 @@ void *packet_handler(void *socket) {
 
             // Incrementa o semáforo sinalizando que há uma nova mensagem na fila
             sem_post(&semItens);
-
-        } else if(msg->destinoId == nucleo.id) {
-            // Se o destino for o próprio roteador
-            printf("[Packet Handler] Mensagem recebida para o roteador destino (ID: %d). Imprimindo mensagem...\n", msg->destinoId);
-            
-            // Imprime o conteúdo da mensagem
-            printf("[Packet Handler] Mensagem para o roteador destino: %s\n", msg->data);
-            
-        } else {
-            // A mensagem não é para este roteador nem para um roteador vizinho
-            printf("[Packet Handler] Mensagem recebida e não é o roteador destino nem um vizinho => Erro: Mensagem inválida.\n");
         }
     }
 
@@ -295,10 +293,11 @@ void *packet_handler(void *socket) {
 
 void init_vetor_distancia() {
     vetorDistancia = malloc(sizeof(EntradaVetor) * config.totalRoteadores);
-
+    melhorCaminho = malloc(sizeof(int) * config.totalRoteadores);
     for (int i = 0; i < config.totalRoteadores; i++) {
         vetorDistancia[i].idDestino = i + 1;
         vetorDistancia[i].custo = (i + 1 == nucleo.id) ? 0 : config.INF;
+        melhorCaminho[i] = -1;
     }
 }
 
@@ -329,7 +328,7 @@ void atualiza_vetor_distancia() {
         if (d + 1 == nucleo.id) continue;
 
         int menor = config.INF;
-
+        int menorid = -1;
         for (int i = 0; i < nucleo.qtdVizinhos; i++) {
             int via = historico[i].idVizinho;
             int custoParaVizinho = historico[i].vetor[d].custo;
@@ -339,6 +338,7 @@ void atualiza_vetor_distancia() {
                 int total = custoParaVizinho + custoDoVizinhoParaD;
                 if (total < menor) {
                     menor = total;
+                    menorid = via;
                 }
             }
         }
@@ -346,6 +346,7 @@ void atualiza_vetor_distancia() {
         if (vetorDistancia[d].custo > menor) {
             vetorDistancia[d].custo = menor;
             mudou = 1;
+            melhorCaminho[d] = menorid;
         }
     }
 
@@ -378,7 +379,6 @@ void *vetor_sender(void *arg) {
             msg.fonteId = nucleo.id;
             msg.fonte = nucleo.endereco;
             msg.destinoId = vizinho->id;
-            msg.destino = vizinho->endereco;
 
             memcpy(msg.data, vetorDistancia, sizeof(EntradaVetor) * config.totalRoteadores);
 
