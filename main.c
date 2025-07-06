@@ -14,6 +14,11 @@
 #define BUFLEN 101  //Max length of buffer
 //#define C_DEBUG 1
 
+#define RESET   "\x1B[0m"
+#define RED     "\x1B[31m"
+#define GREEN   "\x1B[32m"
+#define BLUE    "\x1B[34m"
+#define CYAN    "\x1B[36m"
 
 time_t          *ultimaAtualizacaoVetor;
 
@@ -111,12 +116,13 @@ void *sender(void *socket) {
     char buffer[BUFLEN + 3]; // Buffer para entrada de usuário (id + espaço + mensagem)
 
     while (1){
-        printf("+--------------------------------------+\n");
-        printf("| %-39s|\n", "Escolha uma opção");
-        printf("| %-37s|\n", "0 - Digitar uma mensagem");
-        printf("| %-37s|\n", "1 - Sair");
-        printf("| %-37s|\n", "2 - Mostrar vetores recebidos");
-        printf("+--------------------------------------+\n");
+     
+        printf(BLUE"+--------------------------------------+\n");
+        printf("| %-48s|\n", RESET "Escolha uma opção" BLUE);
+        printf("| %-46s|\n", RESET "0 - Digitar uma mensagem" BLUE);
+        printf("| %-46s|\n", RESET "1 - Sair" BLUE);
+        printf("| %-46s|\n", RESET "2 - Mostrar vetores recebidos" BLUE);
+        printf("+--------------------------------------+\n" RESET);
 
         // Lê a opção do usuário
         scanf("%d", &op);
@@ -124,23 +130,31 @@ void *sender(void *socket) {
 
         if (op == 2) {
             for (int i = 0; i < nucleo.qtdVizinhos; i++) {
-                printf("Vizinho %d: [", historico[i].idVizinho);
+                printf(CYAN "Vizinho %d: " RESET "[", historico[i].idVizinho);
                 for (int j = 0; j < config.totalRoteadores; j++) {
-                    printf("(%d, %d)%s",
+                    char *cor = RESET;
+                    if(historico[i].vetor[j].custo == config.INF) cor = RED;
+                    else if(historico[i].vetor[j].custo + roteadores[i].enlace == vetorDistancia[j].custo) cor = GREEN;
+    
+                    printf("%s(%d, %d)%s", cor,
                         historico[i].vetor[j].idDestino,
                         historico[i].vetor[j].custo,
-                        (j < config.totalRoteadores - 1) ? ", " : "]\n");
+                        (j < config.totalRoteadores - 1) ? RESET ", " : RESET"]\n");
                 }
             }
 
-            printf("vetor distancia: [");
+            printf(BLUE "Vetor distância: " RESET "[");
             for (int i = 0; i < config.totalRoteadores; i++) {
-                printf("(%d, %d)%s", vetorDistancia[i].idDestino, vetorDistancia[i].custo,
-                    (i < config.totalRoteadores - 1) ? ", " : "]\n");
-            }
-            printf("Caminho seguido: [");
-            for (int i = 0; i < config.totalRoteadores; i++) {
-                printf("%d%s", melhorCaminho[i], (i < config.totalRoteadores - 1) ? ", " : "]\n");
+                char *cor = RESET;
+                if(!vetorDistancia[i].custo) cor = GREEN;
+                else if(melhorCaminho[i] == -1) cor = RED;
+    
+                printf("%s(%d, %d)[%d]%s", 
+                    cor, 
+                    vetorDistancia[i].idDestino, 
+                    vetorDistancia[i].custo,
+                    melhorCaminho[i],
+                    (i < config.totalRoteadores - 1) ? RESET ", " : RESET"]\n");
             }
             continue;
         }
@@ -208,6 +222,21 @@ void *queueSender(void *socket) {
         pthread_mutex_unlock(&mutexFila);
 
         memset(&si_other, 0, sizeof(si_other));
+        if(msg->destinoId <= 0 || msg->destinoId > config.totalRoteadores || vetorDistancia[msg->destinoId - 1].custo == config.INF) {
+            time_t now = time(NULL);
+            char *ts = ctime(&now);
+            ts[strcspn(ts, "\n")] = 0;
+            printf(RED "[Queue Sender] %s Vetor de %d não encontrado. Cancelando mensagem para %d\n" RESET, ts, msg->destinoId, msg->destinoId);
+            continue;
+        }
+
+        if(msg->destinoId == nucleo.id) {
+            time_t now = time(NULL);
+            char *ts = ctime(&now);
+            ts[strcspn(ts, "\n")] = 0;
+            printf("[Queue Sender] %s Não é necessário enviar para o próprio roteador\n", ts);
+            continue;
+        }
         // configuração do destino, ip4, porta, e ip enviado
         si_other.sin_family = AF_INET;
         Roteador *r = findById(melhorCaminho[msg->destinoId - 1]);
@@ -272,8 +301,11 @@ void *packet_handler(void *socket) {
         }
 
         if(msg->destinoId == nucleo.id) {
+            time_t now = time(NULL);
+            char *ts = ctime(&now);
+            ts[strcspn(ts, "\n")] = 0;
             // Se o destino for o próprio roteador
-            printf("[Packet Handler] Mensagem recebida de (ID: %d) para o roteador. Imprimindo mensagem...\n", msg->fonteId);
+            printf("[Packet Handler] %s Mensagem recebida de (ID: %d) para o roteador. Imprimindo mensagem...\n", ts, msg->fonteId);
             // Imprime o conteúdo da mensagem
             printf("[Packet Handler] Mensagem para o roteador destino: %s\n", msg->data);
             continue;
@@ -356,11 +388,11 @@ void atualiza_vetor_distancia(int sock) {
         time_t now = time(NULL);
         char *ts = ctime(&now);
         ts[strcspn(ts, "\n")] = 0;
-            printf("[Atualiza Vetor] %s Vetor atualizado: [", ts);
-            for (int i = 0; i < config.totalRoteadores; i++) {
-                printf("(%d, %d)%s", vetorDistancia[i].idDestino, vetorDistancia[i].custo,
-                    (i < config.totalRoteadores - 1) ? ", " : "]\n");
-            }
+        printf("[Atualiza Vetor] %s Vetor atualizado: [", ts);
+        for (int i = 0; i < config.totalRoteadores; i++) {
+            printf("(%d, %d)%s", vetorDistancia[i].idDestino, vetorDistancia[i].custo,
+                (i < config.totalRoteadores - 1) ? ", " : "]\n");
+        }
         enviaVetor(sock);
     }
 }
@@ -386,15 +418,6 @@ void tratar_controle(Mensagem *msg, int sock) {
             break;
         }
     }
-
-
-    #ifdef C_DEBUG
-        printf("[Controle] Vetor recebido de %d: [", msg->fonteId);
-        for (int i = 0; i < config.totalRoteadores; i++) {
-            printf("(%d, %d)%s", vetorRecebido[i].idDestino, vetorRecebido[i].custo,
-                (i < config.totalRoteadores - 1) ? ", " : "]\n");
-        }
-    #endif
 }
 
 void *verifica_tempo_vetores(void *arg) {
