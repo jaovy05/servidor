@@ -14,7 +14,6 @@
 #define BUFLEN 101  //Max length of buffer
 //#define C_DEBUG 1
 
-#define TTL_SEGUNDOS 15  // tempo de vida útil em segundos
 
 time_t          *ultimaAtualizacaoVetor;
 
@@ -33,13 +32,14 @@ Queue           qReceiver;
 pthread_mutex_t mutexFilaReceiver;
 sem_t           semItensReceiver;
 
+void enviaVetor(int sock);
 void *sender(void *socket);
 void *queueSender(void *queue);
 void *receiver(void *sockect);
 void *packet_handler(void *socket);
 void init_vetor_distancia();
 void init_historico_vizinhos();
-void atualiza_vetor_distancia();
+void atualiza_vetor_distancia(int sock);
 void *vetor_sender(void *arg);
 void tratar_controle(Mensagem *msg);
 
@@ -89,8 +89,9 @@ int main(int argc, char *argv[]){
     pthread_create(&t_queue_sender, NULL, queueSender, &sock);
     pthread_create(&t_packet_handler, NULL, packet_handler, &sock);
     pthread_create(&t_vetor_sender, NULL, vetor_sender, &sock);
-    pthread_create(&t_ttl_checker, NULL, verifica_tempo_vetores, NULL);
+    pthread_create(&t_ttl_checker, NULL, verifica_tempo_vetores, &sock);
 
+    enviaVetor(sock);
     // O programa espera até a thread do sender encerrar 
     pthread_join(t_sender, NULL);    
     
@@ -251,6 +252,7 @@ void *receiver(void *socket) {
 }
 
 void *packet_handler(void *socket) {
+    int sock = *(int *)socket;
     while (1) {
         // Aguarda até que haja uma mensagem disponível na fila de entrada
         sem_wait(&semItensReceiver);
@@ -265,7 +267,7 @@ void *packet_handler(void *socket) {
         Roteador *r = findById(msg->destinoId);
 
         if (msg->tipoMensagem == CONTROLE) {
-            tratar_controle(msg);
+            tratar_controle(msg, sock);
             continue;
         }
 
@@ -321,7 +323,7 @@ void init_historico_vizinhos() {
     }
 }
 
-void atualiza_vetor_distancia() {
+void atualiza_vetor_distancia(int sock) {
     int mudou = 0;
 
     for (int d = 0; d < config.totalRoteadores; d++) {
@@ -343,7 +345,7 @@ void atualiza_vetor_distancia() {
             }
         }
         
-        if (vetorDistancia[d].custo > menor) {
+        if (vetorDistancia[d].custo != menor) {
             vetorDistancia[d].custo = menor;
             mudou = 1;
             melhorCaminho[d] = menorid;
@@ -354,13 +356,12 @@ void atualiza_vetor_distancia() {
         time_t now = time(NULL);
         char *ts = ctime(&now);
         ts[strcspn(ts, "\n")] = 0;
-        #ifdef C_DEBUG
             printf("[Atualiza Vetor] %s Vetor atualizado: [", ts);
             for (int i = 0; i < config.totalRoteadores; i++) {
                 printf("(%d, %d)%s", vetorDistancia[i].idDestino, vetorDistancia[i].custo,
                     (i < config.totalRoteadores - 1) ? ", " : "]\n");
             }
-        #endif
+        enviaVetor(sock);
     }
 }
 
@@ -369,49 +370,19 @@ void *vetor_sender(void *arg) {
 
     while (1) {
         sleep(config.tempoVetor); 
-
-        for (int i = 0; i < nucleo.qtdVizinhos; i++) {
-            Roteador *vizinho = &roteadores[i];
-
-            Mensagem msg;
-            memset(&msg, 0, sizeof(Mensagem));
-            msg.tipoMensagem = CONTROLE;
-            msg.fonteId = nucleo.id;
-            msg.fonte = nucleo.endereco;
-            msg.destinoId = vizinho->id;
-
-            memcpy(msg.data, vetorDistancia, sizeof(EntradaVetor) * config.totalRoteadores);
-
-            struct sockaddr_in si_other;
-            memset(&si_other, 0, sizeof(si_other));
-            si_other.sin_family = AF_INET;
-            si_other.sin_port = htons(vizinho->endereco.porta);
-            si_other.sin_addr.s_addr = inet_addr(vizinho->endereco.ip);
-
-
-            sendto(sock, &msg, sizeof(Mensagem), 0, (struct sockaddr *)&si_other, sizeof(si_other));
-
-            #ifdef C_DEBUG
-                printf("[Vetor Sender] Vetor enviado para %d\n", vizinho->id);
-                printf("[Vetor Sender] Vetor local: [");
-                for (int j = 0; j < config.totalRoteadores; j++) {
-                    printf("(%d, %d)%s", vetorDistancia[j].idDestino, vetorDistancia[j].custo,
-                        (j < config.totalRoteadores - 1) ? ", " : "]\n");
-                }
-            #endif
-        }
+        enviaVetor(sock);
     }
     return NULL;
 }
 
-void tratar_controle(Mensagem *msg) {
+void tratar_controle(Mensagem *msg, int sock) {
     EntradaVetor *vetorRecebido = (EntradaVetor *)msg->data;
 
     for (int i = 0; i < nucleo.qtdVizinhos; i++) {
         if (historico[i].idVizinho == msg->fonteId) {
             memcpy(historico[i].vetor, vetorRecebido, sizeof(EntradaVetor) * config.totalRoteadores);
             ultimaAtualizacaoVetor[i] = time(NULL);  // <- ATUALIZA AQUI!
-            atualiza_vetor_distancia();
+            atualiza_vetor_distancia(sock);
             break;
         }
     }
@@ -427,6 +398,7 @@ void tratar_controle(Mensagem *msg) {
 }
 
 void *verifica_tempo_vetores(void *arg) {
+    int sock = *(int *)arg;
     while (1) {
         sleep(1);  // checa a cada segundo
 
@@ -435,7 +407,7 @@ void *verifica_tempo_vetores(void *arg) {
         for (int i = 0; i < nucleo.qtdVizinhos; i++) {
             double diff = difftime(agora, ultimaAtualizacaoVetor[i]);
 
-            if (diff > TTL_SEGUNDOS) {
+            if (diff > config.tempoVetor * 3 && vetorDistancia[historico[i].idVizinho - 1].custo != config.INF) {
                 for (int j = 0; j < config.totalRoteadores; j++) {
                     historico[i].vetor[j].custo = config.INF;
                 }
@@ -444,10 +416,36 @@ void *verifica_tempo_vetores(void *arg) {
                 printf("[TTL] Vetor de %d expirado após %.0f segundos. Resetado.\n",
                        historico[i].idVizinho, diff);
 
-                atualiza_vetor_distancia();  // reavalia o vetor local
+                atualiza_vetor_distancia(sock);  // reavalia o vetor local
             }
         }
     }
     return NULL;
 }
 
+void enviaVetor(int sock) {
+    time_t now = time(NULL);
+    char *ts = ctime(&now);
+    ts[strcspn(ts, "\n")] = 0;
+
+    for (int i = 0; i < nucleo.qtdVizinhos; i++) {
+        Roteador *vizinho = &roteadores[i];
+
+        Mensagem msg;
+        memset(&msg, 0, sizeof(Mensagem));
+        msg.tipoMensagem = CONTROLE;
+        msg.fonteId = nucleo.id;
+        msg.fonte = nucleo.endereco;
+        msg.destinoId = vizinho->id;
+
+        memcpy(msg.data, vetorDistancia, sizeof(EntradaVetor) * config.totalRoteadores);
+
+        struct sockaddr_in si_other;
+        memset(&si_other, 0, sizeof(si_other));
+        si_other.sin_family = AF_INET;
+        si_other.sin_port = htons(vizinho->endereco.porta);
+        si_other.sin_addr.s_addr = inet_addr(vizinho->endereco.ip);
+
+        sendto(sock, &msg, sizeof(Mensagem), 0, (struct sockaddr *)&si_other, sizeof(si_other));
+    }
+}
