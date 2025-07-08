@@ -46,7 +46,8 @@ void init_vetor_distancia();
 void init_historico_vizinhos();
 void atualiza_vetor_distancia(int sock);
 void *vetor_sender(void *arg);
-void tratar_controle(Mensagem *msg);
+void tratar_controle(Mensagem *msg, int sock);
+void *verifica_tempo_vetores(void *arg);
 
 int main(int argc, char *argv[]){
     if(argc != 2){ 
